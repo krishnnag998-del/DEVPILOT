@@ -10,6 +10,7 @@ import {
 import {
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
+  OAuthProvider,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -516,6 +517,9 @@ function Auth({ go }: { go: (s: Screen) => void }) {
       "auth/popup-closed-by-user": "The provider sign-in window was closed before it finished.",
       "auth/popup-blocked": "Your browser blocked the sign-in window. Allow popups and try again.",
       "auth/operation-not-allowed": "This sign-in method is not enabled in the Firebase Console.",
+      "auth/unauthorized-domain": "This site isn't authorized for Firebase sign-in. Add its hostname under Firebase Console > Authentication > Settings > Authorized domains.",
+      "auth/account-exists-with-different-credential": "An account already exists for this email with a different sign-in method. Sign in with that method instead.",
+      "auth/network-request-failed": "Couldn't reach Firebase. Check your internet connection and try again.",
     };
     setError(messages[code] ?? "We couldn't complete sign-in. Check your details and try again.");
   };
@@ -544,7 +548,24 @@ function Auth({ go }: { go: (s: Screen) => void }) {
     setBusy(true);
     setError("");
     try {
-      await signInWithPopup(firebaseAuth, new GoogleAuthProvider());
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      await signInWithPopup(firebaseAuth, provider);
+    } catch (reason) {
+      showAuthError(reason);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const signInWithGitHub = async () => {
+    if (!firebaseAuth) return;
+    setBusy(true);
+    setError("");
+    try {
+      const provider = new OAuthProvider("github.com");
+      provider.addScope("user:email");
+      await signInWithPopup(firebaseAuth, provider);
     } catch (reason) {
       showAuthError(reason);
     } finally {
@@ -558,7 +579,8 @@ function Auth({ go }: { go: (s: Screen) => void }) {
       <div className="auth-heading"><Badge tone="purple">YOUR DEVPILOT WORKSPACE</Badge><h1>{mode === "signup" ? "Create your account" : "Welcome back"}</h1><p>{mode === "signup" ? "Create an account to start exploring repositories." : "Sign in to continue to your workspace."}</p></div>
       <section className="auth-card">
         <div className="auth-providers">
-          <button className="provider-auth" onClick={signInWithGoogle} disabled={busy || !firebaseConfigured}><span className="google-mark">G</span>Continue with Google</button>
+          <button className="provider-auth" onClick={signInWithGoogle} disabled={busy || !firebaseConfigured}><span className="google-mark">G</span>{mode === "signup" ? "Sign up with Google" : "Continue with Google"}</button>
+          <button className="provider-auth" onClick={signInWithGitHub} disabled={busy || !firebaseConfigured}><Icon name="github" size={16} />{mode === "signup" ? "Sign up with GitHub" : "Continue with GitHub"}</button>
         </div>
         <div className="auth-divider"><span>or continue with email</span></div>
         <form className="auth-form" onSubmit={submit}>
@@ -775,20 +797,19 @@ function Connect({ go }: { go: (s: Screen) => void }) {
             <span className="auth-mark">
               <Icon name="github" size={28} />
             </span>
-            <Badge tone="purple">ACCOUNT REQUIRED</Badge>
-            <h1>Sign in with GitHub to continue</h1>
+            <Badge tone="purple">GITHUB CONNECTION REQUIRED</Badge>
+            <h1>Connect GitHub to access repositories</h1>
             <p>
-              Repository analysis is available only to authenticated users.
-              GitHub authorization lets DevPilot read repositories you can
-              access and uses your authenticated API allowance instead of the
-              anonymous rate limit.
+              Your DevPilot account is separate from GitHub. Authorize GitHub
+              here so DevPilot can read repositories you can access and use
+              your authenticated API allowance for repository analysis.
             </p>
             <div className="permission-list">
               <div>
                 <Icon name="check" size={15} />
                 <span>
                   <b>Read your GitHub profile</b>
-                  <small>Used as your DevPilot account identity</small>
+                  <small>Identifies the GitHub account connected for repositories</small>
                 </span>
               </div>
               <div>
@@ -817,7 +838,7 @@ function Connect({ go }: { go: (s: Screen) => void }) {
                 disabled={!auth?.configured}
                 icon="github"
               >
-                Continue with GitHub
+                Authorize GitHub
               </Button>
             )}
             {auth && !auth.configured && (
